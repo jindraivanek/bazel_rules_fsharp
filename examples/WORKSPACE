@@ -1,0 +1,12 @@
+local_repository(
+    name = "io_bazel_rules_dotnet_fsharp",
+    path = ".."
+)
+
+load(
+    "@io_bazel_rules_dotnet_fsharp//dotnet:fsharp.bzl",
+    "fsharp_repositories",
+    "nuget_package",
+)
+
+fsharp_repositories(use_local_mono = True)
