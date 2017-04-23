@@ -4,7 +4,7 @@ load(
 )
 
 fsharp_binary(
-    name = "hello",
+    name = "hello_paket",
     srcs = ["hello.fs"],
-    deps = ["//lib"]
+    deps = ["//lib", "@paket_deps//:dylibs"]
 )

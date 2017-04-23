@@ -6,7 +6,17 @@ local_repository(
 load(
     "@io_bazel_rules_dotnet_fsharp//dotnet:fsharp.bzl",
     "fsharp_repositories",
-    "nuget_package",
+    "paket_dependencies",
 )
 
 fsharp_repositories(use_local_mono = True)
+
+paket_dependencies(
+    name = "paket_deps",
+    deps = """
+source https://nuget.org/api/v2
+framework: net46
+nuget ExtCore
+nuget Argu
+    """,
+)

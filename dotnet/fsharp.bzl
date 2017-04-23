@@ -67,12 +67,11 @@ def _make_fsc_arglist(ctx, output, depinfo, extra_refs=[]):
 
   # /lib:dir1,[dir1]
   if libdirs:
-    args += [_make_fsc_flag(flag_start, "lib", ",".join(list(libdirs)))]
+    args += [_make_fsc_flag(flag_start, "lib", x) for x in list(libdirs)]
 
   # /reference:filename[,filename2]
   if depinfo.refs or extra_refs:
-    args += [_make_fsc_flag(flag_start, "reference",
-                            ",".join(list(depinfo.refs + extra_refs)))]
+    args += [_make_fsc_flag(flag_start, "reference", x) for x in list(depinfo.refs + extra_refs)]
   else:
     args += extra_refs
 
@@ -366,7 +365,7 @@ fsharp_library = rule(
 
 Args:
   name: A unique name for this rule.
-  srcs: F# `.cs` or `.resx` files.
+  srcs: F# `.fs` or `.resx` files.
   deps: Dependencies for this rule
   warn: Compiler warning level for this library. (Defaults to 4).
   fsc: Override the default F# compiler.
@@ -384,7 +383,7 @@ fsharp_binary = rule(
 
 Args:
   name: A unique name for this rule.
-  srcs: F# `.cs` or `.resx` files.
+  srcs: F# `.fs` or `.resx` files.
   deps: Dependencies for this rule
   main_class: Name of class with `main()` method to use as entry point.
   warn: Compiler warning level for this library. (Defaults to 4).
@@ -406,7 +405,7 @@ testing framework.
 
 Args:
   name: A unique name for this rule.
-  srcs: F# `.cs` or `.resx` files.
+  srcs: F# `.fs` or `.resx` files.
   deps: Dependencies for this rule
   warn: Compiler warning level for this library. (Defaults to 4).
   fsc: Override the default F# compiler.
@@ -532,6 +531,68 @@ Args:
   build_file_content: content for the BUILD file.
 """
 
+def _paket_run(repository_ctx, paket_cmd):
+  print("Paket command:", paket_cmd)
+  result = repository_ctx.execute(paket_cmd)
+  if result.return_code:
+    fail("Paket command failed: %s (%s)" % (result.stderr, " ".join(paket_cmd)))
+
+def _paket_package_impl(repository_ctx,
+                        build_file = None,
+                        build_file_content = None):
+  # figure out the output_path
+  output_dir = repository_ctx.path("")
+
+  mono = repository_ctx.path(repository_ctx.attr.mono_exe)
+  paket = repository_ctx.path(repository_ctx.attr.paket_exe)
+
+  # assemble our nuget command
+  paket_cmd = [
+    mono,
+    "--config", "%s/../etc/mono/config" % mono.dirname,
+    paket,
+  ]
+
+  repository_ctx.file(repository_ctx.path("paket.dependencies"), repository_ctx.attr.deps)
+  _paket_run(repository_ctx, paket_cmd + ["install"])
+
+  tpl_file = Label("//dotnet:PAKET_BUILD.tpl")
+  # add the BUILD file
+  repository_ctx.template(
+    "BUILD",
+    tpl_file,
+    {"%{package}": repository_ctx.name,
+      "%{output_dir}": "%s" % output_dir})
+
+_paket_package_attrs = {
+  # The name of the paket package
+  "deps":attr.string(mandatory=True),
+  # Reference to the mono binary
+  "mono_exe":attr.label(
+    executable=True,
+    default=Label("@mono//bin:mono"),
+    cfg="host",
+  ),
+  # Reference to the paket.exe file
+  "paket_exe":attr.label(
+    default=Label("@paket//:paket.exe"),
+  ),
+}
+
+paket_dependencies = repository_rule(
+  implementation=_paket_package_impl,
+  attrs=_paket_package_attrs,
+)
+"""Fetches a paket package as an external dependency.
+
+Args:
+  package_sources: list of sources to use for paket package feeds.
+  package: name of the paket package.
+  version: version of the paket package (e.g. 0.1.2)
+  mono_exe: optional label to the mono executable.
+  paket_exe: optional label to the paket.exe file.
+"""
+
 fsharp_autoconf = repository_rule(
     implementation = _fsharp_autoconf,
     local = True,
@@ -571,6 +632,23 @@ mono_package = repository_rule(
   local = True,
 )
 
+def _paket_repository_impl(repository_ctx):
+  download_output = repository_ctx.path("paket.exe")
+  # download the package
+  repository_ctx.download(
+    "https://github.com/fsprojects/Paket/releases/download/4.5.1/paket.bootstrapper.exe",
+    download_output)
+
+  # now we create the build file.
+  toolchain_build = """
+package(default_visibility = ["//visibility:public"])
+exports_files(["paket.exe"])
+"""
+  repository_ctx.file("BUILD", toolchain_build)
+
+paket_binary = repository_rule(
+    implementation = _paket_repository_impl)
+
 def fsharp_repositories(use_local_mono=False):
   """Adds the repository rules needed for using the F# rules."""
 
@@ -597,4 +675,4 @@ def fsharp_repositories(use_local_mono=False):
   )
 
   mono_package(name="mono", use_local=use_local_mono)
-
+  paket_binary(name="paket")

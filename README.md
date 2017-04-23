@@ -2,9 +2,11 @@
 
 This is forked from https://github.com/bazelbuild/rules_dotnet and quick-patched to work with fsharp.
 
+Tested on linux, maybe it works on OSX, Windows not supported yet.
+
 ## Usage
 
-Add the following to your `WORKSPACE` file to add the external repositories:
+`WORKSPACE` file:
 
 ```python
 git_repository(
@@ -16,30 +18,58 @@ git_repository(
 load(
     "@io_bazel_rules_dotnet_fsharp//dotnet:fsharp.bzl",
     "fsharp_repositories",
-    "nuget_package",
 )
 
 fsharp_repositories(use_local_mono = True)
 ```
 
-## Examples
+## Examples of BUILD files
 
 ### fsharp_library
 
 ```python
+load(
+    "@io_bazel_rules_dotnet_fsharp//dotnet:fsharp.bzl",
+    "fsharp_binary",
+)
+
 fsharp_library(
     name = "lib",
     srcs = ["lib.fs"],
-    deps = ["//my/dependency:SomeLib"],
+    deps = ["//someLib"],
 )
 ```
 
 ### fsharp_binary
 
 ```python
-csharp_binary(
+load(
+    "@io_bazel_rules_dotnet_fsharp//dotnet:fsharp.bzl",
+    "fsharp_binary",
+)
+
+fsharp_binary(
     name = "MyApp",
     srcs = ["MyApp.fs"],
-    deps = ["//my/dependency:MyLib"],
+    deps = ["//lib"],
 )
 ```
+
+## Paket support
+Add `"paket_dependencies"` to `load` in WORKSPACE and following:
+
+```python
+paket_dependencies(
+    name = "paket_deps",
+    deps = """
+source https://nuget.org/api/v2
+framework: net46
+nuget ExtCore
+nuget Argu
+    """,
+)
+```
+
+where `deps` is contents of generated paket.dependencies file.
+
+Then you can reference all packages with `"@paket_deps//:dylibs"` in `deps` attribute.
