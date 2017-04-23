@@ -17,6 +17,24 @@ _MONO_UNIX_BIN = "/usr/local/bin/mono"
 
 # TODO(jeremy): Windows when it's available.
 
+def _mono_args(ctx):
+  if ctx.file.mono:
+    return [
+      ctx.file.mono.path,
+      "--config", "%s/../etc/mono/config" % ctx.file.mono.dirname,
+    ]
+  else: return []
+
+def _mono_args_repository(repository_ctx):
+  if repository_ctx.attr.mono_exe:
+    mono = repository_ctx.path(repository_ctx.attr.mono_exe)
+    return [
+      mono,
+      "--config", "%s/../etc/mono/config" % mono.dirname,
+    ]
+  else: return []
+
+
 def _make_fsc_flag(flag_start, flag_name, flag_value=None):
   return flag_start + flag_name + (":" + flag_value if flag_value else "")
 
@@ -179,7 +197,7 @@ def _fsc_get_output(ctx):
 def _fsc_collect_inputs(ctx, extra_files=[]):
   depinfo = _make_fsc_deps(ctx.attr.deps, extra_files=extra_files)
   inputs = (set(ctx.files.srcs) + depinfo.dlls + depinfo.transitive_dlls
-      + [ctx.file.fsc])
+      + [ctx.file.fsc, ctx.file.mono])
   srcs = [src.path for src in ctx.files.srcs]
   return struct(depinfo=depinfo,
                 inputs=inputs,
@@ -189,7 +207,7 @@ def _fsc_compile_action(ctx, assembly, all_outputs, collected_inputs,
                       extra_refs=[]):
   fsc_args = _make_fsc_arglist(ctx, assembly, collected_inputs.depinfo,
                                extra_refs=extra_refs)
-  command_script = " ".join([ctx.file.fsc.path] + fsc_args +
+  command_script = " ".join(_mono_args(ctx) + [ctx.file.fsc.path] + fsc_args +
                             collected_inputs.srcs)
 
   ctx.action(
@@ -217,7 +235,7 @@ def _fsc_compile_impl(ctx):
   outputs = [output] + (
       [ctx.outputs.doc_xml] if hasattr(ctx.outputs, "doc_xml") else [])
 
-  collected = _fsc_collect_inputs(ctx)
+  collected = _fsc_collect_inputs(ctx, ctx.files._fsc_deps)
 
   depinfo = collected.depinfo
   inputs = collected.inputs
@@ -285,10 +303,9 @@ def _find_and_symlink(repository_ctx, binary, env_variable):
 
 def _fsharp_autoconf(repository_ctx):
   _find_and_symlink(repository_ctx, "mono", "MONO")
-  _find_and_symlink(repository_ctx, "fsharpc", "FSC")
   toolchain_build = """\
 package(default_visibility = ["//visibility:public"])
-exports_files(["mono", "fsharpc"])
+exports_files(["mono"])
 """
   repository_ctx.file("bin/BUILD", toolchain_build)
 
@@ -317,12 +334,13 @@ _COMMON_ATTRS = {
         cfg = "host",
     ),
     "fsc": attr.label(
-        default = Label("@mono//bin:fsharpc"),
+        default = Label("@fsc//:fsc.exe"),
         allow_files = True,
         single_file = True,
         executable = True,
         cfg = "host",
     ),
+    "_fsc_deps": attr.label(default=Label("@fsc//:fsc_libs")),
 }
 
 _LIB_ATTRS = {
@@ -435,13 +453,10 @@ def _nuget_package_impl(repository_ctx,
   package = repository_ctx.attr.package
   output_dir = repository_ctx.path("")
 
-  mono = repository_ctx.path(repository_ctx.attr.mono_exe)
   nuget = repository_ctx.path(repository_ctx.attr.nuget_exe)
 
   # assemble our nuget command
-  nuget_cmd = [
-    mono,
-    "--config", "%s/../etc/mono/config" % mono.dirname,
+  nuget_cmd = _mono_args_repository(repository_ctx) + [
     nuget,
     "install",
     "-Version", repository_ctx.attr.version,
@@ -543,13 +558,10 @@ def _paket_package_impl(repository_ctx,
   # figure out the output_path
   output_dir = repository_ctx.path("")
 
-  mono = repository_ctx.path(repository_ctx.attr.mono_exe)
   paket = repository_ctx.path(repository_ctx.attr.paket_exe)
 
   # assemble our nuget command
-  paket_cmd = [
-    mono,
-    "--config", "%s/../etc/mono/config" % mono.dirname,
+  paket_cmd = _mono_args_repository(repository_ctx) + [
     paket,
   ]
 
@@ -610,7 +622,7 @@ def _mono_osx_repository_impl(repository_ctx):
   # now we create the build file.
   toolchain_build = """
 package(default_visibility = ["//visibility:public"])
-exports_files(["mono", "fsharpc"])
+exports_files(["mono"])
 """
   repository_ctx.file("bin/BUILD", toolchain_build)
 
@@ -671,6 +683,22 @@ def fsharp_repositories(use_local_mono=False):
       build_file_content = """
       package(default_visibility = ["//visibility:public"])
       exports_files(["nuget.exe"])
+      """
+  )
+
+  native.new_http_archive(
+      name = "fsc",
+      url = "https://www.nuget.org/api/v2/package/FSharp.Compiler.Tools/4.1.5",
+      strip_prefix = "tools",
+      type = "zip",
+      build_file_content = """
+package(default_visibility = ["//visibility:public"])
+exports_files(["fsc.exe"]+glob(["*.dll"]))
+filegroup(
+    name = "fsc_libs",
+    srcs = glob(["*.dll"]),
+    visibility = ["//visibility:public"],
+)
       """
   )
 
