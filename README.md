@@ -12,7 +12,7 @@ Tested on linux, maybe it works on OSX, Windows not supported yet.
 git_repository(
     name = "io_bazel_rules_dotnet_fsharp",
     remote = "https://github.com/jindraivanek/bazel_rules_fsharp.git",
-    tag = "0.0.1",
+    tag = "0.0.2",
 )
 
 load(
