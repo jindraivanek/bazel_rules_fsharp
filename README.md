@@ -1,4 +1,4 @@
-# F# Rules
+# F# Bazel rules
 
 This is forked from https://github.com/bazelbuild/rules_dotnet and quick-patched to work with fsharp.
 
@@ -55,7 +55,7 @@ fsharp_binary(
 )
 ```
 
-## Paket support
+## Experimental Paket support
 Add `"paket_dependencies"` to `load` in WORKSPACE and following:
 
 ```python
