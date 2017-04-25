@@ -21,7 +21,7 @@ def _mono_args(ctx):
   if ctx.file.mono:
     return [
       ctx.file.mono.path,
-      "--config", "%s/../etc/mono/config" % ctx.file.mono.dirname,
+      #"--config", "%s/../etc/mono/config" % ctx.file.mono.dirname,
     ]
   else: return []
 
@@ -30,7 +30,7 @@ def _mono_args_repository(repository_ctx):
     mono = repository_ctx.path(repository_ctx.attr.mono_exe)
     return [
       mono,
-      "--config", "%s/../etc/mono/config" % mono.dirname,
+      #"--config", "%s/../etc/mono/config" % mono.dirname,
     ]
   else: return []
 
@@ -303,6 +303,17 @@ def _find_and_symlink(repository_ctx, binary, env_variable):
 
 def _fsharp_autoconf(repository_ctx):
   _find_and_symlink(repository_ctx, "mono", "MONO")
+  toolchain_build = """\
+package(default_visibility = ["//visibility:public"])
+exports_files(["mono"])
+"""
+  repository_ctx.file("bin/BUILD", toolchain_build)
+
+def _windows_mono_wrapper(repository_ctx):
+  mono_bat = "%*"
+  repository_ctx.file("bin/mono.bat", mono_bat)
+  repository_ctx.symlink("bin/mono.bat", "bin/mono")
+  
   toolchain_build = """\
 package(default_visibility = ["//visibility:public"])
 exports_files(["mono"])
@@ -629,7 +640,9 @@ exports_files(["mono"])
 def _mono_repository_impl(repository_ctx):
   use_local = repository_ctx.os.environ.get(
     "RULES_DOTNET_USE_LOCAL_MONO", repository_ctx.attr.use_local)
-  if use_local:
+  if repository_ctx.os.name.find("windows") != -1:
+    _windows_mono_wrapper(repository_ctx)
+  elif use_local:
     _fsharp_autoconf(repository_ctx)
   elif repository_ctx.os.name.find("mac") != -1:
     _mono_osx_repository_impl(repository_ctx)
