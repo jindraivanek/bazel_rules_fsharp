@@ -310,9 +310,10 @@ exports_files(["mono"])
   repository_ctx.file("bin/BUILD", toolchain_build)
 
 def _windows_mono_wrapper(repository_ctx):
-  mono_bat = "%*"
-  repository_ctx.file("bin/mono.bat", mono_bat)
-  repository_ctx.symlink("bin/mono.bat", "bin/mono")
+  mono_sh = """#!/bin/bash
+  $*"""
+  repository_ctx.file("bin/mono.sh", mono_bat)
+  repository_ctx.symlink("bin/mono.sh", "bin/mono")
   
   toolchain_build = """\
 package(default_visibility = ["//visibility:public"])
